@@ -59,13 +59,44 @@ function getDmgBonusData(char) {
 }
 
 /**
- * 格式化角色名称 (处理主角/三月七的命途显示)
+ * 获取特殊角色前端 UI 展示名称 (用于按钮、面板标题)
  */
-function formatCharName(char) {
-    const specialChars = ['开拓者', '三月七', '星', '穹'];
-    if (specialChars.some(name => char.name.includes(name))) {
-        return `${char.name} • ${char.path.name}`;
+function getDisplayCharName(char) {
+    const { CHAR_RULES } = getUiCfg();
+    const id = String(char.id);
+    
+    // 1. 匹配主角规则
+    if (id.startsWith(CHAR_RULES.trailblazer_prefix)) {
+        const isFemale = parseInt(id, 10) % 2 === 0;
+        const baseName = isFemale ? CHAR_RULES.trailblazer_ui.female : CHAR_RULES.trailblazer_ui.male;
+        return `${baseName} • ${char.path?.name || ''}`;
     }
+
+    // 2. 匹配常规多命途角色规则
+    if (CHAR_RULES.multi_path_names.includes(char.name)) {
+        return `${char.name} • ${char.path?.name || ''}`;
+    }
+
+    return char.name;
+}
+
+/**
+ * 获取特殊角色后端逻辑名称 (用于遗器评分、权重文件匹配)
+ */
+function getLogicCharName(char) {
+    const { CHAR_RULES } = getUiCfg();
+    const id = String(char.id);
+    
+    // 1. 匹配主角规则
+    if (id.startsWith(CHAR_RULES.trailblazer_prefix)) {
+        return `开拓者•${char.path?.name || ''}`;
+    }
+
+    // 2. 匹配常规多命途角色规则
+    if (CHAR_RULES.multi_path_names.includes(char.name)) {
+        return `${char.name}•${char.path?.name || ''}`;
+    }
+
     return char.name;
 }
 
@@ -78,7 +109,7 @@ const getMainMenuKeyboard = (uid, characters = []) => {
     // 1. 前 4 个常用角色 (2列)
     const quickChars = characters.slice(0, 4);
     for (let i = 0; i < quickChars.length; i += 2) {
-        const row = quickChars.slice(i, i + 2).map(c => Markup.button.callback(formatCharName(c), `profile:${uid}:${c.id}`));
+        const row = quickChars.slice(i, i + 2).map(c => Markup.button.callback(getDisplayCharName(c), `profile:${uid}:${c.id}`));
         keyboard.push(row);
     }
 
@@ -87,11 +118,11 @@ const getMainMenuKeyboard = (uid, characters = []) => {
         Markup.button.callback('🎭 角色展柜', `me_showcase:${uid}`),
         Markup.button.callback('📊 抽卡统计', `gacha_pool:${uid}:11`)
     ]);
-    
+
     keyboard.push([
         Markup.button.callback('🔄 更新玩家信息', `sync_data:${uid}`)
     ]);
-    
+
     return Markup.inlineKeyboard(keyboard);
 };
 
@@ -99,7 +130,7 @@ const getMainMenuKeyboard = (uid, characters = []) => {
  * 展柜列表 (角色选择)
  */
 const getShowcaseKeyboard = (uid, characters) => {
-    const buttons = characters.map(c => Markup.button.callback(formatCharName(c), `profile:${uid}:${c.id}`));
+    const buttons = characters.map(c => Markup.button.callback(getDisplayCharName(c), `profile:${uid}:${c.id}`));
     const keyboard = [];
     for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2));
     keyboard.push([
@@ -129,14 +160,14 @@ function renderPlayerInfo(data) {
     } else if (data._isFallback) {
         msg += TEXT.player.fallback;
     }
-    
+
     msg += TEXT.player.info
         .replace('{nickname}', esc(data.player.nickname))
         .replace('{uid}', data.player.uid)
         .replace('{level}', data.player.level)
         .replace('{achievement}', data.player.space_info.achievement_count)
         .replace('{avatar}', data.player.space_info.avatar_count);
-    
+
     return msg;
 }
 
@@ -144,7 +175,7 @@ function renderPlayerInfo(data) {
 async function resolveUid(ctx, allowBindFallback = true) {
     const text = ctx.message?.text || "";
     const args = text.trim().split(/\s+/);
-    
+
     // 1. 如果有参数且参数格式错误
     if (args.length > 1) {
         const uid = args[1];
@@ -164,7 +195,7 @@ async function resolveUid(ctx, allowBindFallback = true) {
         const boundUid = await cache.getBindUid(ctx.from.id);
         if (boundUid) return boundUid;
     }
-    
+
     return null;
 }
 
@@ -184,9 +215,9 @@ const setupProfileHandlers = (bot) => {
         // 1. 立即执行本地绑定并回复
         await cache.bindUid(ctx.from.id, uid);
         logger.done(`用户 ${ctx.from.id} 成功绑定 UID ${uid}`);
-        
+
         const placeholder = api.getPlaceholderData(uid);
-        
+
         await ctx.reply(TEXT.auth.bind_success.replace('{uid}', uid), {
             parse_mode: 'HTML'
         });
@@ -203,7 +234,7 @@ const setupProfileHandlers = (bot) => {
                 if (data && !data._isPlaceholder) {
                     profileStorage.saveProfile(uid, data);
                     logger.done(`UID ${uid} 数据后台同步成功`);
-                    
+
                     // 同步成功，静默刷新面板
                     await ctx.telegram.editMessageText(
                         ctx.chat.id, 
@@ -240,7 +271,7 @@ const setupProfileHandlers = (bot) => {
         const { TEXT } = getUiCfg();
         const uid = await cache.getBindUid(ctx.from.id);
         if (!uid) return ctx.reply(TEXT.auth.update_need_bind);
-        
+
         await ctx.reply(TEXT.auth.update_syncing);
         const data = await api.getPlayerDetail(uid, true);
         if (data && !data._isPlaceholder) {
@@ -280,7 +311,7 @@ const setupProfileHandlers = (bot) => {
         await ctx.answerCbQuery().catch(() => {});
         const uid = ctx.match[1];
         const data = await api.getPlayerDetail(uid);
-        
+
         await ctx.editMessageText(renderPlayerInfo(data), {
             parse_mode: 'HTML',
             ...getMainMenuKeyboard(uid, data.characters)
@@ -295,7 +326,7 @@ const setupProfileHandlers = (bot) => {
         const data = await api.getPlayerDetail(uid);
 
         let msg = TEXT.profile.showcase_title.replace('{uid}', uid);
-        
+
         await ctx.editMessageText(msg, {
             parse_mode: 'HTML',
             ...getShowcaseKeyboard(uid, data.characters)
@@ -358,7 +389,7 @@ const setupProfileHandlers = (bot) => {
         const { TEXT, PROFILE, STATS } = uiCfg;
 
         let msg = TEXT.char.detail_title
-            .replace('{name}', esc(formatCharName(char)))
+            .replace('{name}', esc(getDisplayCharName(char)))
             .replace('{level}', char.level)
             .replace('{rank}', char.rank)
             .replace('{path}', char.path.name)
@@ -376,12 +407,12 @@ const setupProfileHandlers = (bot) => {
         }
 
         msg += `<code>`;
-        
+
         PROFILE.main.forEach(id => {
             const res = getStatParts(char, id, ['crit_rate', 'crit_dmg'].includes(id));
             msg += `${STATS[id][1]}: ${res.t.padEnd(8)} (${res.p})\n`;
         });
-        
+
         PROFILE.other.forEach(id => {
             let res, name;
             if (id === 'all_dmg') {
@@ -398,8 +429,11 @@ const setupProfileHandlers = (bot) => {
         if (char.relics && char.relics.length > 0) {
             msg += `─`.repeat(22) + `\n`;
             let totalV = 0;
+
+            const logicName = getLogicCharName(char);
+
             char.relics.forEach(r => {
-                const { subStats, validRolls } = getRelicAnalysis(r, char.name);
+                const { subStats, validRolls } = getRelicAnalysis(r, logicName);
                 totalV += parseFloat(validRolls);
                 const mName = shortName(r.main_affix.name);
 
@@ -412,21 +446,27 @@ const setupProfileHandlers = (bot) => {
 
                 subStats.forEach((s, idx) => {
                     const prefix = (idx === subStats.length - 1) ? '└ ' : '├ ';
+
+                    const contText = s.contribution !== "-" 
+                    ? TEXT.char.relic_cont_value.replace('{val}', s.contribution)
+                    : TEXT.char.relic_cont_empty;
+
                     msg += TEXT.char.relic_sub
                         .replace('{prefix}', prefix)
                         .replace('{name}', s.name.padEnd(4))
                         .replace('{val}', s.value.padEnd(7))
                         .replace('{mark}', s.rollMark)
-                        .replace('{cont}', s.contribution !== "-" ? s.contribution : '-');
+                        .replace('{cont}', contText);
                 });
             });
 
+            msg += `\n` + `─`.repeat(22);
             const v = parseFloat(totalV);
             const rating = v >= 35 ? "极品" : v >= 30 ? "优秀" : v >= 24 ? "合格" : "稍逊";
             msg += TEXT.char.score_footer
                 .replace('{total}', totalV.toFixed(1))
                 .replace('{rating}', rating)
-                .replace('{weights}', getWeightsForChar(char.name));
+                .replace('{weights}', getWeightsForChar(logicName));
         }
         msg += `</code>`;
 

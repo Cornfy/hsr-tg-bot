@@ -121,8 +121,10 @@ module.exports = {
             detail_title: "✨ <b>{name}</b> (Lv.{level} {rank}命)\n◈ 命途: {path} | 属性: {element}\n\n",
             lc_title: "🗡️ <b>{name}</b> (精{rank})\n",
             relic_title: "\n{slot} [{set}]\n├ 主: {main}: {val} | 有效: {v}v\n",
-            relic_sub: "{prefix}{name} +{val} {mark} {cont}v\n",
-            score_footer: "\n总有效词条: {total}v ({rating})\n\n有效词条权重:\n{weights}",
+            relic_sub: "{prefix}{name} +{val} {mark} {cont}\n", // 用于有效词条显示的模板
+            relic_cont_value: "{val}v", // 有效词条的显示格式
+            relic_cont_empty: "-",      // 无效词条的显示格式
+            score_footer: "\n总有效词条: {total}v ({rating})\n有效词条权重: {weights}",
         },
         gacha: {
             loading: "⏳ 正在解析并合并抽卡记录...",
@@ -152,5 +154,18 @@ module.exports = {
             gacha_log: "抽卡记录",
             link: "链接",
         }
-    }
+    },
+
+    // --- 角色特殊命名与多命途匹配规则 (热重载支持) ---
+    CHAR_RULES: {
+        // 开拓者（主角）的底层 ID 共同特征（前缀）
+        trailblazer_prefix: "800",
+
+        // 主角在 UI 上的名字映射（奇数 ID 对应男主穹，偶数 ID 对应女主星）
+        trailblazer_ui: { male: "穹", female: "星" },
+
+        // 需要追加 “•命途” 后缀以防权重混淆的多命途常规角色名单
+        multi_path_names: ["三月七"] 
+    },
 };
+
