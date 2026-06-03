@@ -2,14 +2,14 @@
 const { loadModule } = require('./loader');
 const path = require('path');
 
-// 动态加载 UI 配置
-const getUiCfg = () => loadModule(path.join(process.cwd(), 'config/ui-config.js'));
+// 动态加载核心数据配置
+const getGameConst = () => loadModule(path.join(process.cwd(), 'config/game-constants.js'));
 
 /**
  * 解析属性 ID 为简短名称
  */
 function resolveStatName(id) {
-    const { STATS } = getUiCfg();
+    const { STATS } = getGameConst();
     
     // 处理 _pc 后缀 (百分比权重)
     let isPercent = id.endsWith('_pc');
@@ -43,8 +43,7 @@ function getWeightsForChar(charName) {
 }
 
 function getRelicAnalysis(relic, charName) {
-    const uiCfg = getUiCfg();
-    const { STATS } = uiCfg;
+    const { STATS } = getGameConst();
 
     let allWeights = {};
     try {

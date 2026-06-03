@@ -25,11 +25,11 @@ const getGachaKeyboard = (uid, gameCode = 'HSR') => {
         ],
         [
             Markup.button.callback('🤝 联动角色', `gacha_pool:${gameCode}:${uid}:21`),
-            Markup.button.callback('📦 联动光锥', `gacha_pool:${gameCode}:${uid}:22`)
+            Markup.button.callback('🏹 联动光锥', `gacha_pool:${gameCode}:${uid}:22`)
         ],
         [
             Markup.button.callback('⏳ 常驻跃迁', `gacha_pool:${gameCode}:${uid}:1`),
-            Markup.button.callback('🏠 个人中心', `back_to_me:${uid}`)
+            Markup.button.callback('⬅️ 返回主页', `back_to_me:${uid}`)
         ]
     ]);
 };
@@ -116,6 +116,7 @@ const setupGachaHandlers = (bot) => {
     });
 
     bot.action(/^gacha_pool:(\w+):([1-9]\d{8}):(\d+)$/, async (ctx) => {
+        const { I18N, CONST } = getCfg();
         await ctx.answerCbQuery().catch(() => {});
         const [_, gameCode, uid, poolId] = ctx.match;
 
@@ -127,8 +128,13 @@ const setupGachaHandlers = (bot) => {
         }
 
         const logs = gachaStorage.getLocalGacha(uid, gameCode);
-        if (!logs) return;
-        
+        if (!logs || logs.length === 0) {
+            return ctx.editMessageText(I18N.GACHA.EMPTY_DATA, {
+                parse_mode: 'HTML',
+                ...getGachaKeyboard(uid, gameCode)
+            }).catch(() => {});
+        }
+
         const msg = gachaRender.renderGachaText(uid, poolId, logs);
         try {
             await ctx.editMessageText(msg, {

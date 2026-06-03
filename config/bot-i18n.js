@@ -58,6 +58,8 @@ module.exports = {
                 LIGHTCONE: "🗡️ <b>{name}</b> (精{rank})\n",
                 RELIC_MAIN: "\n{slot} [{set}]\n├ 主: {main}: {val} | 有效: {v}v\n",
                 RELIC_SUB: "{prefix}{name} +{val} {mark} {cont}\n",
+                RELIC_CONT_VALUE: "{val}v",
+                RELIC_CONT_EMPTY: "-",
                 SCORE_FOOTER: "\n总有效词条: {total}v ({rating})\n有效词条权重: {weights}",
             }
         },
@@ -70,11 +72,11 @@ module.exports = {
             HELP_PROMPT: "\n📊 <b>抽卡记录数据同步</b>\n\n请直接<b>回复本条消息</b>并发送抽卡链接，或直接上传 <code>.json</code> 文件。\n\n💡 只要是有效的 URL，机器人都会尝试进行抓取。\n",
             API_FAILED: "❌ 同步失败：链接无效、过期或 API 解析异常。请确保你复制的是完整的历史记录链接。",
             UNSUPPORTED_GAME: "❌ 暂不支持 <b>{name}</b> ({code}) 的统计分析。\n\n目前仅支持《崩坏：星穹铁道》的抽卡分析。",
-            EMPTY_DATA: "该池子暂无数据记录",
+            EMPTY_DATA: "⚠️ 该卡池暂无数据记录。",
             FETCHING: "[Gacha] 正在抓取{name}池...",
             REPORT: {
                 TITLE: "📊 <b>{pool}分析</b> (UID: <code>{uid}</code>)\n运气评价：<b>{luck}</b>\n\n",
-                STATS: "<b>📈 核心数据</b>\n• 抽卡总数: <b>{total}</b> (等价 <b>{cost}</b> 星琼)\n• 已出金卡: <b>{gold}</b> | 歪: <b>{wai}</b>\n• 平均金数: <b>{avg}</b> 抽/金\n• 出紫频率: <b>{p_rate}%</b> ({p_count}张)\n\n",
+                STATS: "<b>📈 核心数据</b>\n• 抽卡总数: <b>{total}</b> (等价 <b>{cost}</b> 星琼)\n• 已出金卡: <b>{gold}</b> | 歪: <b>{wai}</b>\n• 均金抽数: <b>{avg}</b> 抽/金\n• 均UP抽数: <b>{avg_up}</b> 抽/UP\n• 出紫频率: <b>{p_rate}%</b> ({p_count}张)\n\n",
                 PITY: "<b>⏳ 近期进度</b>\n• 已累积 <b>{pity}</b> 抽未出金\n• 进度: <code>{bar}</code>\n\n",
                 HISTORY: "<b>✨ 历史出金记录</b>\n<pre>{table}</pre>\n",
                 MORE: "<i>... 还有 {count} 条记录未显示</i>\n"

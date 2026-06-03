@@ -20,7 +20,6 @@ async function bootstrap() {
             { command: 'me', description: '个人中心 (查看已绑定信息)' },
             { command: 'profile', description: '角色面板查询 [UID]' },
             { command: 'gacha', description: '抽卡统计分析 [URL/JSON]' },
-            { command: 'update', description: '同步最新游戏数据' },
             { command: 'help', description: '查看详细功能说明与帮助' }
         ];
 
