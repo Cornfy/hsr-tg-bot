@@ -100,7 +100,13 @@ async function fetchGachaLogs(params) {
             }
         }
 
-        return { uid, logs: allLogs, gameCode };
+        return { 
+            uid, 
+            logs: allLogs, 
+            gameCode, 
+            region, 
+            game_biz: gameBiz 
+        };
     } catch (e) {
         logger.error('抽卡记录抓取发生异常', e.message);
         return null;

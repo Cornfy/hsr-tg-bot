@@ -91,7 +91,30 @@ async function parseGachaUrl(userInput) {
 function parseGachaJson(data) {
     let uid = "";
     let logs = [];
+    let game_biz = "";
+    let region = "";
 
+    // 1. 优先识别标准 SRGF / UIGF 格式
+    if (data.info && (data.info.srgf_version || data.info.uigf_version)) {
+        uid = data.info.uid;
+        game_biz = data.info.game_biz;
+        region = data.info.region;
+        logs = data.list || [];
+        return { uid: String(uid), logs, game_biz, region };
+    }
+
+    // 2. 识别特定工具格式 (如 Yunzai 的 hkrpg 节点)
+    if (data.hkrpg && Array.isArray(data.hkrpg)) {
+        // Yunzai 的 hkrpg 是一个数组，每个元素包含 uid 和 list
+        const entry = data.hkrpg[0];
+        if (entry && entry.list) {
+            uid = entry.uid;
+            logs = entry.list;
+            return { uid: String(uid), logs };
+        }
+    }
+
+    // 3. 兜底：深度启发式搜索
     function findLogs(obj) {
         if (!obj || typeof obj !== 'object') return;
         if (Array.isArray(obj)) {

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const moment = require('moment');
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -17,43 +18,82 @@ function getStoragePath(gameCode, type, uid) {
 }
 
 /**
- * 保存并合并抽卡记录
+ * 保存并合并抽卡记录 (标准化 SRGF 风格存储)
  */
-function saveAndMergeGacha(uid, newLogs, gameCode = 'HSR') {
+function saveAndMergeGacha(uid, newLogs, metadata = {}) {
+    const { gameCode = 'HSR', game_biz = 'hkrpg_cn', region = 'prod_gf_cn' } = metadata;
     const filePath = getStoragePath(gameCode, 'gacha', uid);
-    let localLogs = [];
+    
+    let localData = { info: {}, list: [] };
 
     if (fs.existsSync(filePath)) {
         try {
-            localLogs = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            // 兼容旧的纯数组格式
+            if (Array.isArray(raw)) {
+                localData.list = raw;
+            } else {
+                localData = raw;
+            }
         } catch (e) {
-            localLogs = [];
+            localData = { info: {}, list: [] };
         }
     }
 
-    // 2. 合并并根据记录 ID 去重
-    const combined = [...newLogs, ...localLogs];
+    // 1. 合并并根据记录 ID 去重
+    const combined = [...newLogs, ...localData.list];
     const uniqueMap = new Map();
     combined.forEach(item => {
-        if (item.id) uniqueMap.set(item.id, item);
+        if (item.id) uniqueMap.set(String(item.id), item);
     });
 
     const finalLogs = Array.from(uniqueMap.values())
         .sort((a, b) => new Date(b.time) - new Date(a.time));
 
-    fs.writeFileSync(filePath, JSON.stringify(finalLogs, null, 2));
+    // 2. 构造自描述对象 (参考 SRGF)
+    const storageObj = {
+        info: {
+            uid: String(uid),
+            game: gameCode,
+            game_biz: game_biz,
+            region: region,
+            export_app: 'hsr-tg-bot',
+            export_time: moment().format('YYYY-MM-DD HH:mm:ss'),
+            srgf_version: 'v1.0'
+        },
+        list: finalLogs
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(storageObj, null, 2));
     return finalLogs;
 }
 
 /**
- * 读取本地存储的所有记录
+ * 读取本地存储的抽卡数据集
+ * 返回：{ info, list }
  */
-function getLocalGacha(uid, gameCode = 'HSR') {
+function getLocalGachaData(uid, gameCode = 'HSR') {
     const filePath = getStoragePath(gameCode, 'gacha', uid);
     if (fs.existsSync(filePath)) {
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        try {
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            if (Array.isArray(data)) {
+                return { info: { uid }, list: data };
+            }
+            return data;
+        } catch (e) {
+            return null;
+        }
     }
     return null;
 }
 
-module.exports = { saveAndMergeGacha, getLocalGacha };
+/**
+ * 快捷获取本地抽卡列表 (用于 Render)
+ */
+function getLocalGacha(uid, gameCode = 'HSR') {
+    const data = getLocalGachaData(uid, gameCode);
+    return data ? data.list : null;
+}
+
+module.exports = { saveAndMergeGacha, getLocalGacha, getLocalGachaData };

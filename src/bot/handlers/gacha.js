@@ -52,8 +52,12 @@ const setupGachaHandlers = (bot) => {
                 throw new Error(I18N.GACHA.ERROR_NO_DATA);
             }
 
-            // 3. 保存并合并 (JSON 默认存入星铁目录)
-            const finalLogs = gachaStorage.saveAndMergeGacha(uid, logs, CONST.DEFAULT_GAME || 'HSR'); 
+            // 3. 保存并合并 (JSON 提取 metadata)
+            const finalLogs = gachaStorage.saveAndMergeGacha(uid, logs, {
+                gameCode: 'HSR',
+                game_biz: res.data.info?.game_biz || 'hkrpg_cn',
+                region: res.data.info?.region || 'prod_gf_cn'
+            }); 
             logger.done(`用户 ${ctx.from.id} 通过 JSON 导入 UID ${uid} 的抽卡记录 (${logs.length}条)`);
             
             await ctx.reply(I18N.GACHA.IMPORT_SUCCESS.replace('{uid}', uid).replace('{count}', logs.length), {
@@ -96,8 +100,12 @@ const setupGachaHandlers = (bot) => {
             return ctx.reply(I18N.GACHA.API_FAILED);
         }
 
-        // 3. 保存并合并
-        const finalLogs = gachaStorage.saveAndMergeGacha(result.uid, result.logs, result.gameCode);
+        // 3. 保存并合并 (带元数据)
+        const finalLogs = gachaStorage.saveAndMergeGacha(result.uid, result.logs, {
+            gameCode: result.gameCode,
+            game_biz: result.game_biz,
+            region: result.region
+        });
         logger.done(`用户 ${ctx.from.id} 同步 UID ${result.uid} [${result.gameCode}] 抽卡记录成功 (新增 ${result.logs.length}条)`);
         
         const msg = gachaRender.renderGachaText(result.uid, "11", finalLogs);
