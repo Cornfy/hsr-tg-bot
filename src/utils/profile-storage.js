@@ -1,35 +1,35 @@
-// src/utils/profile-storage.js
 const fs = require('fs');
 const path = require('path');
-const logger = require('./logger');
 
-const PROFILE_DIR = path.join(process.cwd(), 'data', 'profiles');
+const DATA_DIR = path.join(process.cwd(), 'data');
 
-// 确保目录存在
-if (!fs.existsSync(PROFILE_DIR)) {
-    fs.mkdirSync(PROFILE_DIR, { recursive: true });
+/**
+ * 获取存储路径
+ * 结构：data/{gameCode}/profile/{uid}.json
+ */
+function getStoragePath(gameCode, uid) {
+    const dir = path.join(DATA_DIR, gameCode, 'profile');
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    return path.join(dir, `${uid}.json`);
 }
 
 /**
- * 将玩家角色数据持久化到硬盘
+ * 保存玩家面板数据
  */
-function saveProfile(uid, data) {
-    const filePath = path.join(PROFILE_DIR, `${uid}.json`);
+function saveProfile(uid, data, gameCode = 'HSR') {
+    const filePath = getStoragePath(gameCode, uid);
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
 /**
- * 从硬盘读取缓存的玩家数据
+ * 获取本地缓存的面板数据
  */
-function getProfile(uid) {
-    const filePath = path.join(PROFILE_DIR, `${uid}.json`);
+function getProfile(uid, gameCode = 'HSR') {
+    const filePath = getStoragePath(gameCode, uid);
     if (fs.existsSync(filePath)) {
-        try {
-            return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        } catch (e) {
-            logger.error(`读取存档文件失败 (UID: ${uid})`, e.message);
-            return null;
-        }
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
     return null;
 }

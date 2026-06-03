@@ -1,22 +1,28 @@
-// src/utils/gacha-storage.js
 const fs = require('fs');
 const path = require('path');
+const logger = require('./logger');
 
-const GACHA_DIR = path.join(process.cwd(), 'data', 'gacha');
+const DATA_DIR = path.join(process.cwd(), 'data');
 
-// 确保目录存在
-if (!fs.existsSync(GACHA_DIR)) {
-    fs.mkdirSync(GACHA_DIR, { recursive: true });
+/**
+ * 获取存储路径
+ * 结构：data/{gameCode}/{type}/{uid}.json
+ */
+function getStoragePath(gameCode, type, uid) {
+    const dir = path.join(DATA_DIR, gameCode, type);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    return path.join(dir, `${uid}.json`);
 }
 
 /**
  * 保存并合并抽卡记录
  */
-function saveAndMergeGacha(uid, newLogs) {
-    const filePath = path.join(GACHA_DIR, `${uid}.json`);
+function saveAndMergeGacha(uid, newLogs, gameCode = 'HSR') {
+    const filePath = getStoragePath(gameCode, 'gacha', uid);
     let localLogs = [];
 
-    // 1. 如果本地已有记录，先读取
     if (fs.existsSync(filePath)) {
         try {
             localLogs = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -25,7 +31,7 @@ function saveAndMergeGacha(uid, newLogs) {
         }
     }
 
-    // 2. 合并并根据记录 ID 去重 (抽卡记录的 id 是唯一的)
+    // 2. 合并并根据记录 ID 去重
     const combined = [...newLogs, ...localLogs];
     const uniqueMap = new Map();
     combined.forEach(item => {
@@ -33,19 +39,17 @@ function saveAndMergeGacha(uid, newLogs) {
     });
 
     const finalLogs = Array.from(uniqueMap.values())
-        .sort((a, b) => new Date(b.time) - new Date(a.time)); // 按时间倒序
+        .sort((a, b) => new Date(b.time) - new Date(a.time));
 
-    // 3. 写入磁盘
     fs.writeFileSync(filePath, JSON.stringify(finalLogs, null, 2));
-    
     return finalLogs;
 }
 
 /**
  * 读取本地存储的所有记录
  */
-function getLocalGacha(uid) {
-    const filePath = path.join(GACHA_DIR, `${uid}.json`);
+function getLocalGacha(uid, gameCode = 'HSR') {
+    const filePath = getStoragePath(gameCode, 'gacha', uid);
     if (fs.existsSync(filePath)) {
         return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     }
