@@ -56,12 +56,13 @@ function shortName(name, gameCode = 'HSR') {
 }
 
 /**
- * 格式化数值，正数添加 + 号
+ * 格式化数值，保留一位小数，并填充空格用于对齐
  * @param {number} num - 数值
+ * @param {boolean} [isPct=false] - 是否为百分比
  * @returns {string} 格式化后的字符串
  */
-function format(num) {
-    return num > 0 ? `+${num}` : num;
+function format(num, isPct = false) {
+    return (isPct ? (num * 100) : num).toFixed(1).padStart(7);
 }
 
 /**
@@ -69,12 +70,15 @@ function format(num) {
  * @param {Object} char - 角色数据对象
  * @param {string} field - 属性字段 ID
  * @param {boolean} [isPct=false] - 是否为百分比数值
- * @returns {Object} 包含展示值(t)和详情(p)的对象
+ * @returns {Object} 包含展示值(totalDisplay)和详情(breakdownDisplay)的对象
  */
 function getStatParts(char, field, isPct = false) {
-    const base = char.attributes?.find(a => a.field === field)?.value || 0;
-    const add = char.additions?.find(a => a.field === field)?.value || 0;
-    return { t: (isPct ? ((base + add) * 100).toFixed(1) + "%" : (base + add).toFixed(1)), p: `${format(base)} +${format(add)}` };
+    const baseValue = char.attributes?.find(a => a.field === field)?.value || 0;
+    const additionValue = char.additions?.find(a => a.field === field)?.value || 0;
+    return { 
+        totalDisplay: (isPct ? ((baseValue + additionValue) * 100).toFixed(1) + "%" : (baseValue + additionValue).toFixed(1)), 
+        breakdownDisplay: `${format(baseValue, isPct)} + ${format(additionValue, isPct)}` 
+    };
 }
 
 /**
@@ -85,20 +89,27 @@ function getStatParts(char, field, isPct = false) {
  */
 function getDmgBonusData(char, gameCode = 'HSR') {
     const { PROFILE_UI, STATS } = getCfg(gameCode);
-    let max = { name: '增伤', total: 0, base: 0, add: 0 };
+    let maxDmgBonus = { name: '增伤', total: 0, baseValue: 0, additionValue: 0 };
     
     PROFILE_UI.dmg_bonus.forEach(id => {
-        const b = char.attributes?.find(a => a.field === id)?.value || 0;
-        const a = char.additions?.find(a => a.field === id)?.value || 0;
-        if (b + a > max.total) {
-            max = { name: STATS[id][1], total: b + a, base: b, add: a };
+        const baseValue = char.attributes?.find(a => a.field === id)?.value || 0;
+        const additionValue = char.additions?.find(a => a.field === id)?.value || 0;
+        if (baseValue + additionValue > maxDmgBonus.total) {
+            maxDmgBonus = { name: STATS[id][1], total: baseValue + additionValue, baseValue, additionValue };
         }
     });
 
-    const allB = char.attributes?.find(a => a.field === 'all_dmg')?.value || 0;
-    const allA = char.additions?.find(a => a.field === 'all_dmg')?.value || 0;
-    max.total += (allB + allA); max.base += allB; max.add += allA;
-    return { n: max.name, t: (max.total * 100).toFixed(1) + "%", p: `${format(max.base)} +${format(max.add)}` };
+    const allDmgBase = char.attributes?.find(a => a.field === 'all_dmg')?.value || 0;
+    const allDmgAddition = char.additions?.find(a => a.field === 'all_dmg')?.value || 0;
+    maxDmgBonus.total += (allDmgBase + allDmgAddition);
+    maxDmgBonus.baseValue += allDmgBase;
+    maxDmgBonus.additionValue += allDmgAddition;
+    
+    return { 
+        name: maxDmgBonus.name, 
+        totalDisplay: (maxDmgBonus.total * 100).toFixed(1) + "%", 
+        breakdownDisplay: `${format(maxDmgBonus.baseValue, true)} + ${format(maxDmgBonus.additionValue, true)}` 
+    };
 }
 
 /**
@@ -108,6 +119,7 @@ function getDmgBonusData(char, gameCode = 'HSR') {
  * @returns {string} 展示名称
  */
 function getDisplayCharName(char, gameCode = 'HSR') {
+    if (!char || !char.id) return "???";
     const { CHAR_RULES } = getCfg(gameCode);
     const id = String(char.id);
     
@@ -199,19 +211,33 @@ const getShowcaseKeyboard = (uid, characters, gameCode = 'HSR') => {
  */
 function renderPlayerInfo(data, gameCode = 'HSR') {
     const { I18N } = getCfg(gameCode);
-    const T = I18N.PLAYER_CENTER.DASHBOARD;
-    let msg = T.TITLE;
-    if (data._isPlaceholder) {
-        msg += T.QUEUING;
-    } else if (data._isFallback) {
-        msg += T.FALLBACK;
+    const T = I18N.PLAYER_CENTER.DASHBOARD || {};
+    const CP = I18N.CHAR_PANEL;
+    
+    // 增加数据结构防御性检查
+    if (!data || !data.player) {
+        return CP.DATA_EXCEPTION;
     }
-    msg += T.INFO
-        .replace('{nickname}', esc(data.player.nickname))
-        .replace('{uid}', data.player.uid)
-        .replace('{level}', data.player.level)
-        .replace('{achievement}', data.player.space_info?.achievement_count || 0)
-        .replace('{avatar}', data.player.space_info?.avatar_count || 0);
+
+    // 安全地获取 UI 模版文本，不硬编码默认值
+    let msg = T.TITLE || '';
+    if (data._isPlaceholder) {
+        msg += T.QUEUING || '';
+    } else if (data._isFallback) {
+        msg += T.FALLBACK || '';
+    }
+    
+    // 安全地提取数据字段，默认为 ???
+    const getValue = (val) => (val !== undefined && val !== null && val !== '') ? val : '???';
+
+    if (T.INFO) {
+        msg += T.INFO
+            .replace('{nickname}', esc(getValue(data.player.nickname)))
+            .replace('{uid}', getValue(data.player.uid))
+            .replace('{level}', getValue(data.player.level))
+            .replace('{achievement}', getValue(data.player.space_info?.achievement_count))
+            .replace('{avatar}', getValue(data.player.space_info?.avatar_count));
+    }
     return msg;
 }
 
@@ -222,15 +248,19 @@ function renderPlayerInfo(data, gameCode = 'HSR') {
  * @returns {string} 格式化后的角色详情 HTML 文案
  */
 function renderCharacterDetail(char, gameCode = 'HSR') {
+    if (!char) {
+        const { I18N } = getCfg(gameCode);
+        return I18N.CHAR_PANEL.CHAR_DATA_MISSING;
+    }
     const { I18N, PROFILE_UI, STATS } = getCfg(gameCode);
     const T = I18N.CHAR_PANEL.DETAIL;
 
     let msg = T.TITLE
         .replace('{name}', esc(getDisplayCharName(char, gameCode)))
-        .replace('{level}', char.level)
-        .replace('{rank}', char.rank)
-        .replace('{path}', char.path.name)
-        .replace('{element}', char.element.name);
+        .replace('{level}', char.level || '?')
+        .replace('{rank}', char.rank || 0)
+        .replace('{path}', char.path?.name || '未知')
+        .replace('{element}', char.element?.name || '未知');
 
     const lc = char.light_cone;
     if (lc) {
@@ -246,20 +276,20 @@ function renderCharacterDetail(char, gameCode = 'HSR') {
     msg += `<code>`;
     PROFILE_UI.main.forEach(id => {
         const res = getStatParts(char, id, ['crit_rate', 'crit_dmg'].includes(id));
-        msg += `${STATS[id][1]}: ${res.t.padEnd(8)} (${res.p})\n`;
+        msg += `${STATS[id][1]}: ${res.totalDisplay.padEnd(8)} (${res.breakdownDisplay})\n`;
     });
 
     PROFILE_UI.other.forEach(id => {
         let res, name;
         if (id === 'all_dmg') {
             const dmg = getDmgBonusData(char, gameCode);
-            res = { t: dmg.t, p: dmg.p };
-            name = dmg.n;
+            res = { totalDisplay: dmg.totalDisplay, breakdownDisplay: dmg.breakdownDisplay };
+            name = dmg.name;
         } else {
             res = getStatParts(char, id, true);
             name = STATS[id][1];
         }
-        msg += `${name}: ${res.t.padEnd(8)} (${res.p})\n`;
+        msg += `${name}: ${res.totalDisplay.padEnd(8)} (${res.breakdownDisplay})\n`;
     });
 
     if (char.relics && char.relics.length > 0) {
@@ -325,6 +355,18 @@ async function resolveUid(ctx, allowBindFallback = true, gameCode = 'HSR') {
 }
 
 /**
+ * 校验用户是否绑定了该 UID
+ * @param {string|number} tgId - Telegram 用户 ID
+ * @param {string|number} uid - 游戏 UID
+ * @param {string} [gameCode='HSR'] - 游戏代码
+ * @returns {Promise<boolean>}
+ */
+const isUidBound = async (tgId, uid, gameCode = 'HSR') => {
+    const boundUid = await cache.getBindUid(tgId, gameCode);
+    return boundUid === String(uid);
+};
+
+/**
  * 初始化角色面板处理流程
  * @param {Object} bot - Telegraf 实例
  */
@@ -351,16 +393,18 @@ const setupProfileHandlers = (bot) => {
         (async () => {
             try {
                 const data = await api.getPlayerDetail(uid, true, gameCode);
-                if (data && !data._isPlaceholder) {
+        if (data && !data._isPlaceholder && data.player?.nickname) {
                     profileStorage.saveProfile(uid, data, gameCode);
                     logger.done(`UID ${uid} 数据后台同步成功`);
                     await ctx.telegram.editMessageText(ctx.chat.id, dashboardMsg.message_id, null, renderPlayerInfo(data, gameCode) + I18N.PLAYER_CENTER.DASHBOARD.SYNC_SUCCESS, {
                         parse_mode: 'HTML',
                         ...getMainMenuKeyboard(uid, data.characters, gameCode)
                     }).catch(() => {});
+                } else {
+                    logger.warn(`UID ${uid} 数据同步返回了无效或占位数据，拒绝写入本地，防止缓存污染`);
                 }
             } catch (e) {
-                logger.error('数据后台同步失败', e);
+                logger.error(I18N.CHAR_PANEL.SYNC_FAIL, e);
                 await ctx.telegram.editMessageText(ctx.chat.id, dashboardMsg.message_id, null, renderPlayerInfo(placeholder, gameCode) + I18N.PLAYER_CENTER.DASHBOARD.SYNC_FAILED_HINT, {
                     parse_mode: 'HTML',
                     ...getMainMenuKeyboard(uid, [], gameCode)
@@ -376,11 +420,12 @@ const setupProfileHandlers = (bot) => {
         if (!uid) return ctx.reply(I18N.AUTH.UPDATE_NEED_BIND);
         await ctx.reply(I18N.AUTH.UPDATE_SYNCING);
         const data = await api.getPlayerDetail(uid, true, gameCode);
-        if (data && !data._isPlaceholder) {
+        if (data && !data._isPlaceholder && data.player?.nickname) {
             profileStorage.saveProfile(uid, data, gameCode);
             logger.done(`用户 ${ctx.from.id} 强制刷新 UID ${uid} 成功`);
             ctx.reply(I18N.AUTH.UPDATE_DONE);
         } else {
+            logger.warn(`UID ${uid} 刷新返回了无效或占位数据，拒绝写入本地，防止缓存污染`);
             ctx.reply(I18N.AUTH.UPDATE_FAILED);
         }
     });
@@ -397,7 +442,9 @@ const setupProfileHandlers = (bot) => {
         }
         const data = await api.getPlayerDetail(uid, false, gameCode);
         if (!data) return ctx.reply(I18N.COMMON.ERROR_API);
-        profileStorage.saveProfile(uid, data, gameCode);
+        if (!data._isPlaceholder && data.player?.nickname) {
+            profileStorage.saveProfile(uid, data, gameCode);
+        }
         await ctx.reply(renderPlayerInfo(data, gameCode), {
             parse_mode: 'HTML',
             ...getMainMenuKeyboard(uid, data.characters, gameCode)
@@ -439,33 +486,62 @@ const setupProfileHandlers = (bot) => {
             });
         }
         const uid = uidResult;
-        const data = await api.getPlayerDetail(uid, false, gameCode);
-        const boundUid = await cache.getBindUid(ctx.from.id, gameCode);
-        if (boundUid === uid && !data._isPlaceholder) profileStorage.saveProfile(uid, data, gameCode);
-        let msg = I18N.CHAR_PANEL.SEARCH_RES
-            .replace('{nickname}', esc(data.player.nickname))
-            .replace('{uid}', uid);
-        msg += renderCharacterDetail(data.characters[0], gameCode);
-        await ctx.reply(msg, {
+
+        // 立即返回一个同步中的面板
+        const placeholder = api.getPlaceholderData(uid);
+        const dashboardMsg = await ctx.reply(renderPlayerInfo(placeholder, gameCode), {
             parse_mode: 'HTML',
-            ...getShowcaseKeyboard(uid, data.characters, gameCode)
+            ...getMainMenuKeyboard(uid, [], gameCode)
         });
+
+        // 异步获取数据并刷新
+        (async () => {
+            try {
+                const data = await api.getPlayerDetail(uid, true, gameCode);
+                if (data && !data._isPlaceholder && data.player?.nickname) {
+                    if (await isUidBound(ctx.from.id, uid, gameCode)) {
+                        profileStorage.saveProfile(uid, data, gameCode);
+                    }
+                    await ctx.telegram.editMessageText(ctx.chat.id, dashboardMsg.message_id, null, renderPlayerInfo(data, gameCode), {
+                        parse_mode: 'HTML',
+                        ...getMainMenuKeyboard(uid, data.characters, gameCode)
+                    }).catch(() => {});
+                } else {
+                    logger.warn(`UID ${uid} 同步返回了无效或占位数据，拒绝写入本地`);
+                }
+            } catch (e) {
+                logger.error(I18N.CHAR_PANEL.SYNC_FAIL, e);
+                // 同步失败时保留原面板，或给出提示
+            }
+        })();
     });
 
     bot.action(/^profile:([1-9]\d{8}):(\d+)$/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
         const [_, uid, charId] = ctx.match;
         const gameCode = 'HSR';
-        const data = profileStorage.getProfile(uid, gameCode); 
-        const char = data?.characters.find(c => c.id == charId);
+
+        // 【修复】稳健获取数据：先尝试缓存，若缺失或为占位符则强制调用 API 刷新并缓存
+        let data = await api.getPlayerDetail(uid, false, gameCode);
+        if (!data || data._isPlaceholder) {
+            data = await api.getPlayerDetail(uid, true, gameCode);
+            if (data && !data._isPlaceholder) {
+                if (await isUidBound(ctx.from.id, uid, gameCode)) {
+                    profileStorage.saveProfile(uid, data, gameCode);
+                }
+            }
+        }
+        
+        const char = data?.characters?.find(c => c.id == charId);
         if (!char) return;
+
         const msg = renderCharacterDetail(char, gameCode);
         try {
             await ctx.editMessageText(msg, { 
                 parse_mode: 'HTML',
                 ...getShowcaseKeyboard(uid, data.characters, gameCode)
             });
-        } catch (e) { if (!e.message.includes('not modified')) logger.error('编辑角色详情消息失败', e.message); }
+        } catch (e) { if (!e.message.includes('not modified')) logger.error(I18N.CHAR_PANEL.EDIT_FAIL, e.message); }
     });
 
     bot.action(/^sync_data:([1-9]\d{8})(?::(\d+))?$/, async (ctx) => {
@@ -478,7 +554,11 @@ const setupProfileHandlers = (bot) => {
         const data = await api.getPlayerDetail(uid, true, gameCode);
         if (!data) return ctx.reply(I18N.COMMON.ERROR_API, { parse_mode: 'HTML' });
         const boundUid = await cache.getBindUid(ctx.from.id, gameCode);
-        if (boundUid === uid) profileStorage.saveProfile(uid, data, gameCode);
+        if (boundUid === uid && !data._isPlaceholder && data.player?.nickname) {
+            profileStorage.saveProfile(uid, data, gameCode);
+        } else if (boundUid === uid) {
+            logger.warn(`UID ${uid} 同步返回了无效或占位数据，拒绝写入本地，防止缓存污染`);
+        }
         if (charId) {
             ctx.match = [null, uid, charId];
             return bot.handleUpdate(ctx.update); 

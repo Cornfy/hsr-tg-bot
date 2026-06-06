@@ -68,6 +68,11 @@ module.exports = {
             INVALID_UID: "❌ <b>输入格式错误</b>\n你输入的 <code>{input}</code> 不是合法的 9 位 UID，请重新输入。",
             SHOWCASE_TITLE: "🎭 <b>角色展柜</b> (UID: {uid})\n请选择角色查看详情：",
             SEARCH_RES: "👤 <b>{nickname}</b> (UID: {uid})\n",
+            NO_CHARACTERS: "⚠️ 暂无角色数据，请检查展柜是否公开。",
+            DATA_EXCEPTION: "⚠️ 数据结构异常，无法显示玩家信息。",
+            CHAR_DATA_MISSING: "⚠️ 角色数据已缺失，请尝试刷新面板。",
+            SYNC_FAIL: "❌ 数据后台同步失败",
+            EDIT_FAIL: "❌ 编辑角色详情消息失败",
             DETAIL: {
                 TITLE: "✨ <b>{name}</b> (Lv.{level} {rank}命)\n◈ 命途: {path} | 属性: {element}\n\n",
                 LIGHTCONE: "🗡️ <b>{name}</b> (精{rank})\n",
