@@ -3,12 +3,19 @@ const moment = require('moment');
 const path = require('path');
 const { loadModule } = require('./loader');
 
-// 加载配置
-const getCfg = () => ({
-    CONST: loadModule(path.join(process.cwd(), 'config/game-constants.js')),
-    I18N: loadModule(path.join(process.cwd(), 'config/bot-i18n.js')).I18N,
-    SETTINGS: loadModule(path.join(process.cwd(), 'config/app-settings.js'))
-});
+// 加载配置 (已适配多游戏分库)
+const getCfg = (gameCode = 'HSR') => {
+    const constants = loadModule(path.join(process.cwd(), 'config/game-constants.js'));
+    const i18n = loadModule(path.join(process.cwd(), 'config/bot-i18n.js')).I18N;
+    const settings = loadModule(path.join(process.cwd(), 'config/app-settings.js'));
+
+    return {
+        CONST: constants, // 返回全量以供多游戏名称查询
+        GAME_CONST: constants[gameCode] || constants.HSR,
+        I18N: i18n,
+        SETTINGS: settings[gameCode] || settings.HSR
+    };
+};
 
 /**
  * 计算字符串的显示宽度（全角字符算 2，半角算 1）
@@ -64,8 +71,8 @@ function getLuckLevel(averagePulls, gachaSettings) {
 /**
  * 分析并整理抽卡数据
  */
-function analyseGacha(logs, poolId) {
-    const { CONST } = getCfg();
+function analyseGacha(logs, poolId, gameCode = 'HSR') {
+    const { GAME_CONST } = getCfg(gameCode);
     const targetPoolId = String(poolId);
 
     const poolLogs = logs
@@ -96,9 +103,9 @@ function analyseGacha(logs, poolId) {
             let isOffBanner = false;
 
             // 判定是否歪了 (11/21 为角色池，12/22 为武器/光锥池)
-            if (["11", "21"].includes(targetPoolId) && CONST.STANDARD_DATA.chars.includes(item.name)) {
+            if (["11", "21"].includes(targetPoolId) && GAME_CONST.STANDARD_DATA.chars.includes(item.name)) {
                 isOffBanner = true;
-            } else if (["12", "22"].includes(targetPoolId) && CONST.STANDARD_DATA.weapons.includes(item.name)) {
+            } else if (["12", "22"].includes(targetPoolId) && GAME_CONST.STANDARD_DATA.weapons.includes(item.name)) {
                 isOffBanner = true;
             }
 
@@ -134,13 +141,13 @@ function analyseGacha(logs, poolId) {
 /**
  * 渲染抽卡分析报告文本
  */
-function renderGachaText(uid, poolId, rawLogs) {
-    const result = analyseGacha(rawLogs, poolId);
-    const { CONST, I18N, SETTINGS } = getCfg();
+function renderGachaText(uid, poolId, rawLogs, gameCode = 'HSR') {
+    const result = analyseGacha(rawLogs, poolId, gameCode);
+    const { GAME_CONST, I18N, SETTINGS } = getCfg(gameCode);
     
     if (!result) return I18N.GACHA.EMPTY_DATA;
 
-    const poolNames = CONST.GACHA_POOLS;
+    const poolNames = GAME_CONST.GACHA_POOLS;
     const gachaSettings = SETTINGS.GACHA_SETTINGS;
     const luckLevel = getLuckLevel(result.avg, gachaSettings);
 
@@ -204,7 +211,7 @@ function renderGachaText(uid, poolId, rawLogs) {
  * 渲染不支持的游戏提示
  */
 function renderUnsupportedGame(gameCode) {
-    const { CONST, I18N } = getCfg();
+    const { CONST, I18N } = getCfg(gameCode);
     const gameName = CONST.GACHA_GAME_NAMES[gameCode] || gameCode;
     
     return I18N.GACHA.UNSUPPORTED_GAME

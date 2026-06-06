@@ -1,28 +1,34 @@
 // src/bot/handlers.js
+/**
+ * 机器人消息路由网关模块
+ * 负责初始化业务处理链、处理全局指令、强制重载机制及日志记录
+ */
 const path = require('path');
 const { Composer } = require('telegraf');
 const { loadModule } = require('../utils/loader');
 const logger = require('../utils/logger');
 
-// 内部核心状态：保持当前激活的动态路由网关指针
+// 当前激活的动态路由 Composer 容器指针
 let currentHandlers = null;
 
 /**
- * 统加载所有配置
+ * 加载机器人所需的全部基础配置 (常量、语言包、设置)
+ * @returns {Object} 包含 CONST, I18N_MODULE, SETTINGS 的对象
  */
 const getFullCfg = () => ({
-    CONST: loadModule(path.join(process.cwd(), 'config/game-constants.js')),
-    I18N_MODULE: loadModule(path.join(process.cwd(), 'config/bot-i18n.js')),
-    SETTINGS: loadModule(path.join(process.cwd(), 'config/app-settings.js'))
+    CONST: loadModule(path.join(process.cwd(), 'config/game-constants.js'), true),
+    I18N_MODULE: loadModule(path.join(process.cwd(), 'config/bot-i18n.js'), true),
+    SETTINGS: loadModule(path.join(process.cwd(), 'config/app-settings.js'), true)
 });
 
 /**
- * 安全清理所有业务文件、渲染器、元数据及 UI 文本的 Node 缓存并完成全量热重载
+ * 业务逻辑与 UI 文本的热重载机制
+ * 清理 Node.js 模块缓存，重新初始化所有处理器和 Composer 路由链
  */
 function reloadAllModules() {
     logger.info('正在执行全量业务逻辑热更新...');
 
-    // 统一定义需要斩断缓存的所有核心模块绝对路径
+    // 定义需要重载的核心模块绝对路径映射
     const paths = {
         scorer: path.join(process.cwd(), 'src/utils/relic-scorer'),
         meta: path.join(process.cwd(), 'src/utils/meta'),
@@ -31,31 +37,32 @@ function reloadAllModules() {
         conf_const: path.join(process.cwd(), 'config/game-constants'),
         conf_i18n: path.join(process.cwd(), 'config/bot-i18n'),
         conf_settings: path.join(process.cwd(), 'config/app-settings'),
+        conf_weights: path.join(process.cwd(), 'config/weights'),
         profile: path.join(process.cwd(), 'src/bot/handlers/profile'),
         gacha: path.join(process.cwd(), 'src/bot/handlers/gacha')
     };
 
-    // 1. 强力清除 require.cache 缓存
+    // 1. 强力清除 require.cache，强制 Node 重新加载模块文件
     Object.values(paths).forEach(p => {
         try { delete require.cache[require.resolve(p)]; } catch (e) {}
     });
 
-    // 2. 加载最新配置
+    // 2. 加载最新配置和处理器
     const { I18N_MODULE } = getFullCfg();
     const { WELCOME_MSG, I18N } = I18N_MODULE;
     const { setupProfileHandlers } = require('./handlers/profile');
     const { setupGachaHandlers } = require('./handlers/gacha');
 
-    // 3. 执行底层工具类的热重载加载 (可选，确保最新代码被引入)
-    loadModule(paths.scorer);
-    loadModule(paths.meta);
-    loadModule(paths.gachaRender);
-    loadModule(paths.gachaParser);
+    // 3. 执行工具类预加载 (确保重载后状态正确)
+    loadModule(paths.scorer, true);
+    loadModule(paths.meta, true);
+    loadModule(paths.gachaRender, true);
+    loadModule(paths.gachaParser, true);
 
-    // 4. 创建一个干净的、隔离的全新 Composer 容器
+    // 4. 创建隔离的全新 Composer 容器 (动态路由网关)
     const stage = new Composer();
 
-    // a. 智能捕获：处理 Force Reply 的回复
+    // a. 智能回复路由 (处理 Force Reply 场景)
     stage.on('text', async (ctx, next) => {
         if (ctx.message.text.startsWith('/')) return next();
 
@@ -64,7 +71,7 @@ function reloadAllModules() {
 
         const text = ctx.message.text.trim();
 
-        // 处理 UID 类的回复 (用 I18N 中的关键词识别场景)
+        // 识别 UID 绑定或查询场景
         if (reply.text.includes("UID")) {
             const uidMatch = text.match(/[1-9]\d{8}/);
             const cmd = (reply.text.includes("绑定") || reply.text.includes("bind")) ? 'bind' : 'profile';
@@ -75,7 +82,7 @@ function reloadAllModules() {
             return next();
         }
 
-        // 处理 Gacha 链接/文件类的回复
+        // 识别抽卡链接/文件处理场景
         if (reply.text.includes("抽卡") || reply.text.includes("链接") || reply.text.includes("gacha")) {
             const urlMatch = text.match(/https?:\/\/[^\s]+/);
             const input = urlMatch ? urlMatch[0] : text;
@@ -88,11 +95,11 @@ function reloadAllModules() {
         return next();
     });
 
-    // b. 初始化挂载子业务路由
+    // b. 挂载子业务路由
     setupProfileHandlers(stage);
     setupGachaHandlers(stage);
 
-    // c. 基础公共基础指令
+    // c. 基础路由 (启动/帮助)
     const welcomeHandler = (ctx) => {
         ctx.reply(WELCOME_MSG, { parse_mode: 'HTML' });
     };
@@ -105,7 +112,7 @@ function reloadAllModules() {
         if (isBot) welcomeHandler(ctx);
     });
 
-    // d. 管理员专属 /reload 指令
+    // d. 管理员指令：强制触发热重载
     stage.command('reload', async (ctx) => {
         if (!process.env.ADMIN_TG_ID || String(ctx.from.id) !== String(process.env.ADMIN_TG_ID)) {
             return ctx.reply(I18N.COMMON.ERROR_PERMISSION);
@@ -119,15 +126,20 @@ function reloadAllModules() {
         }
     });
 
-    // 5. 替换外壳网关指向
+    // 5. 更新全局指针
     currentHandlers = stage;
     logger.done('全量业务逻辑、元数据及 UI 配置已完成热更新');
 }
 
-// 初始化
+// 模块初始化时执行一次重载，确保加载到最新代码
 reloadAllModules();
 
+/**
+ * 初始化机器人中间件
+ * @param {Object} bot - Telegraf 实例
+ */
 const setupHandlers = (bot) => {
+    // 中间件：日志记录
     bot.use((ctx, next) => {
         if (ctx.message?.text?.startsWith('/')) {
             const cmd = ctx.message.text.split(/\s+/)[0];
@@ -138,6 +150,7 @@ const setupHandlers = (bot) => {
         return next();
     });
 
+    // 中间件：通过动态网关指针处理业务
     bot.use((ctx, next) => {
         if (currentHandlers) {
             return currentHandlers.middleware()(ctx, next);
@@ -145,6 +158,7 @@ const setupHandlers = (bot) => {
         return next();
     });
 
+    // 回调动作：管理员强制重载
     bot.action('force_reload_cfg', async (ctx) => {
         const { I18N } = getFullCfg().I18N_MODULE;
         if (!process.env.ADMIN_TG_ID || String(ctx.from.id) !== String(process.env.ADMIN_TG_ID)) {

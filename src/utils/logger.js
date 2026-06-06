@@ -1,11 +1,16 @@
 // src/utils/logger.js
+/**
+ * 日志模块
+ * 提供统一的终端日志格式化输出功能，支持按类别着色（INFO, 指令, 交互, 成功, 警告, 错误）
+ */
 const moment = require('moment');
 
 /**
- * 简易日志系统 (模仿 Yunzai 风格)
+ * 日志记录器类
  */
 class Logger {
     constructor() {
+        // 定义控制台 ANSI 着色配置
         this.colors = {
             reset: "\x1b[0m",
             blue: "\x1b[34m",
@@ -18,19 +23,26 @@ class Logger {
         };
     }
 
+    /**
+     * 获取当前格式化时间戳
+     * @returns {string} HH:mm:ss 格式时间
+     */
     getTime() {
         return moment().format('HH:mm:ss');
     }
 
     /**
-     * 系统级信息 (白色)
+     * 记录普通系统级信息
+     * @param {string} msg - 日志信息
      */
     info(msg) {
         console.log(`${this.gray(this.getTime())} [INFO] ${msg}`);
     }
 
     /**
-     * 指令执行信息 (青色)
+     * 记录用户触发的机器人指令
+     * @param {Object} ctx - Telegraf 上下文对象
+     * @param {string} cmdName - 指令名称
      */
     command(ctx, cmdName) {
         const user = ctx.from;
@@ -44,7 +56,9 @@ class Logger {
     }
 
     /**
-     * 交互执行信息 (紫色)
+     * 记录用户触发的按钮交互动作
+     * @param {Object} ctx - Telegraf 上下文对象
+     * @param {string} actionName - 交互动作名称
      */
     action(ctx, actionName) {
         const user = ctx.from;
@@ -56,27 +70,31 @@ class Logger {
     }
 
     /**
-     * 业务成功信息 (绿色)
+     * 记录业务成功执行的信息
+     * @param {string} msg - 成功描述信息
      */
     done(msg) {
         console.log(`${this.gray(this.getTime())} ${this.green('[成功]')} ${msg}`);
     }
 
     /**
-     * 警告信息 (黄色)
+     * 记录警告信息
+     * @param {string} msg - 警告信息
      */
     warn(msg) {
         console.log(`${this.gray(this.getTime())} ${this.yellow('[警告]')} ${msg}`);
     }
 
     /**
-     * 错误信息 (红色)
+     * 记录错误信息
+     * @param {string} msg - 错误描述信息
+     * @param {string|Error} [err] - 错误堆栈或对象
      */
     error(msg, err = "") {
         console.error(`${this.gray(this.getTime())} ${this.red('[错误]')} ${msg}`, err);
     }
 
-    // 辅助着色函数
+    // 辅助颜色包装函数
     blue(s) { return `${this.colors.blue}${s}${this.colors.reset}`; }
     green(s) { return `${this.colors.green}${s}${this.colors.reset}`; }
     yellow(s) { return `${this.colors.yellow}${s}${this.colors.reset}`; }

@@ -20,13 +20,19 @@ const WELCOME_MSG = `
 module.exports = {
     WELCOME_MSG,
 
-    // --- 业务 UI 文本模版 (语义化层级) ---
+    // --- 业务 UI 文本模版 (语义化层级，按逻辑顺序整理) ---
     I18N: {
+        // 1. 公共 UI/状态提示
         COMMON: {
             LOADING: "⏳ 正在请求数据，请稍候...",
             ERROR_API: "❌ 无法获取数据，请检查网络或 UID 是否正确。",
             ERROR_PERMISSION: "❌ 权限不足：该指令仅限配置文件中指定的管理员使用。",
+            KEYBOARD: {
+                BACK_TO_HOME: "⬅️ 返回主页"
+            }
         },
+
+        // 2. 鉴权与用户绑定
         AUTH: {
             BIND_PROMPT: "❓ 请输入 9 位 UID 进行绑定，或直接回复本条消息。\n例如：<code>/bind 100000001</code>",
             BIND_SUCCESS: "✅ <b>UID {uid} 绑定成功！</b>\n正在尝试从远程同步数据，请稍候...",
@@ -36,16 +42,25 @@ module.exports = {
             UPDATE_FAILED: "❌ 刷新失败，请稍后重试。",
             ME_NOT_BOUND: "❓ 你还没有绑定 UID，请发送 <code>/bind [你的UID]</code>",
         },
+
+        // 3. 玩家数据与展柜
         PLAYER_CENTER: {
             DASHBOARD: {
                 TITLE: "🏠 <b>个人数据中心</b>\n",
                 QUEUING: "⏳ <b>正在排队获取实时数据，请稍后同步...</b>\n",
                 FALLBACK: "⚠️ <b>提示: 当前 API 服务繁忙，显示为缓存数据</b>\n",
                 INFO: "👤 玩家: <b>{nickname}</b>\n🆔 UID: <code>{uid}</code>\n📊 等级: Lv.{level}\n\n🏆 成就: {achievement} | 🎭 角色: {avatar}\n请选择功能模块：",
-                SYNC_SUCCESS: "\n✨ 数据同步已完成",
-                SYNC_DONE: "\n✅ 数据已刷新",
+                SYNC_SUCCESS: "\n✅ 数据同步已完成",
+                SYNC_IN_PROGRESS: "\n🔄 正在同步数据...",
                 SYNC_FAILED_HINT: "\n❌ 实时同步暂时失败，你可以稍后点击同步按钮重试。",
                 SYNC_BACK_FALLBACK: "\n⚠️ 数据同步失败，已回退至本地缓存。",
+            }
+        },
+        PROFILE: {
+            KEYBOARD: {
+                SHOWCASE: "🎭 角色展柜",
+                GACHA_STATS: "📊 抽卡统计",
+                SYNC: "🔄 更新玩家信息"
             }
         },
         CHAR_PANEL: {
@@ -56,13 +71,15 @@ module.exports = {
             DETAIL: {
                 TITLE: "✨ <b>{name}</b> (Lv.{level} {rank}命)\n◈ 命途: {path} | 属性: {element}\n\n",
                 LIGHTCONE: "🗡️ <b>{name}</b> (精{rank})\n",
-                RELIC_MAIN: "\n{slot} [{set}]\n├ 主: {main}: {val} | 有效: {v}v\n",
+                RELIC_MAIN: "\n{slot} [{set}]\n├ 主: {main}: {val} | 有效词条数: {v}v\n",
                 RELIC_SUB: "{prefix}{name} +{val} {mark} {cont}\n",
                 RELIC_CONT_VALUE: "{val}v",
                 RELIC_CONT_EMPTY: "-",
-                SCORE_FOOTER: "\n总有效词条: {total}v ({rating})\n有效词条权重: {weights}",
+                SCORE_FOOTER: "\n总有效词条数: {total}v ({rating})\n有效词条权重: {weights}",
             }
         },
+
+        // 4. 抽卡分析
         GACHA: {
             LOADING: "⏳ 正在解析并合并抽卡记录...",
             IMPORT_SUCCESS: "✅ 记录导入成功！\nUID: <code>{uid}</code> (检测到 {count} 条记录)",
@@ -75,13 +92,29 @@ module.exports = {
             EMPTY_DATA: "⚠️ 该卡池暂无数据记录。",
             FETCHING: "[Gacha] 正在抓取{name}池...",
             REPORT: {
-                TITLE: "📊 <b>{pool}分析</b> (UID: <code>{uid}</code>)\n运气评价：<b>{luck}</b>\n\n",
+                TITLE: "📊 <b>{pool}分析</b>\n<b>UID: <code>{uid}</code></b>\n运气评价：<b>{luck}</b>\n\n",
                 STATS: "<b>📈 核心数据</b>\n• 抽卡总数: <b>{total}</b> (等价 <b>{cost}</b> 星琼)\n• 已出金卡: <b>{gold}</b> | 歪: <b>{wai}</b>\n• 均金抽数: <b>{avg}</b> 抽/金\n• 均UP抽数: <b>{avg_up}</b> 抽/UP\n• 出紫频率: <b>{p_rate}%</b> ({p_count}张)\n\n",
                 PITY: "<b>⏳ 近期进度</b>\n• 已累积 <b>{pity}</b> 抽未出金\n• 进度: <code>{bar}</code>\n\n",
                 HISTORY: "<b>✨ 历史出金记录</b>\n<pre>{table}</pre>\n",
                 MORE: "<i>... 还有 {count} 条记录未显示</i>\n"
+            },
+            KEYBOARD: {
+                CHAR_POOL: "🎭 角色活动",
+                WEAPON_POOL: "🗡️ 光锥活动",
+                COLLAB_CHAR: "🤝 联动角色",
+                COLLAB_WEAPON: "🏹 联动光锥",
+                STANDARD_POOL: "⏳ 常驻跃迁",
+                BACK_TO_ME: "⬅️ 返回主页",
+                EXPORT: "📤 导出记录"
+            },
+            EXPORT_MESSAGES: {
+                LOADING: "正在导出...",
+                EMPTY: "暂无抽卡记录数据",
+                ERROR: "导出失败，请稍后再试。错误: {error}"
             }
         },
+
+        // 5. 系统通知
         SYSTEM: {
             RELOAD_SUCCESS: "🚀 【重载】全量业务逻辑与配置已完成热更新！",
             RELOAD_ERROR: "❌ 重载失败: {error}",
