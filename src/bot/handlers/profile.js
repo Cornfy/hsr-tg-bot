@@ -10,6 +10,79 @@ const path = require('path');
 const { loadModule } = require('../../utils/loader');
 
 /**
+ * 合并新获取的角色列表与缓存的角色列表
+ * @param {Array} freshChars - 最新获取的角色列表
+ * @param {Array} cachedChars - 缓存的角色列表
+ * @param {boolean} [isFreshData=true] - 是否为真实的远程最新数据
+ * @returns {Array} 合并并去重后的角色列表
+ */
+function mergeCharacters(freshChars = [], cachedChars = [], isFreshData = true) {
+    const charMap = new Map();
+    
+    // 1. 先将缓存中的角色全部存入 Map (保持其现有的 _isFresh 状态)
+    cachedChars.forEach(c => {
+        charMap.set(String(c.id), { ...c });
+    });
+    
+    // 2. 如果不是来自远程的真实刷新（比如只是读取了本地缓存或占位符），则不更新在线状态，仅做简单的合并（去重）
+    if (!isFreshData) {
+        freshChars.forEach(c => {
+            if (!charMap.has(String(c.id))) {
+                charMap.set(String(c.id), { ...c });
+            }
+        });
+        return Array.from(charMap.values());
+    }
+
+    // 3. 如果是真实的远程数据，我们需要全局更新“在线”状态
+    // 第一步：先将 Map 中现有的所有角色标记为“非在线” (Archive)
+    for (let c of charMap.values()) {
+        c._isFresh = false;
+    }
+
+    // 第二步：将当前 API 返回的角色标记为“在线” (Fresh) 并覆盖更新数据
+    freshChars.forEach(c => {
+        charMap.set(String(c.id), { ...c, _isFresh: true });
+    });
+    
+    return Array.from(charMap.values());
+}
+
+/**
+ * 获取合并了缓存数据的玩家详情
+ * @param {string|number} uid - 用户UID
+ * @param {Object} [options={}] - 配置选项
+ * @param {boolean} [options.force=false] - 是否强制更新
+ * @param {string} [options.gameCode='HSR'] - 游戏代码
+ * @param {boolean} [options.shouldSave=false] - 是否在获取到有效数据后保存至本地
+ * @returns {Promise<Object>} 合并后的玩家数据
+ */
+async function getMergedData(uid, options = {}) {
+    const { force = false, gameCode = 'HSR', shouldSave = false } = options;
+    const data = await api.getPlayerDetail(uid, force, gameCode);
+    if (!data) return null;
+    
+    const cachedData = profileStorage.getProfile(uid, gameCode);
+    const cachedChars = (cachedData && cachedData.characters) ? cachedData.characters : [];
+    const isFreshData = !data._isPlaceholder && !data._isFallback;
+
+    if (data._isPlaceholder && cachedData && cachedData.player) {
+        data.player = cachedData.player;
+        data._isPlaceholder = false; 
+        data._isFallback = true;
+    }
+
+    const mergedChars = mergeCharacters(data.characters || [], cachedChars, isFreshData);
+    const mergedData = { ...data, characters: mergedChars };
+
+    if (shouldSave && isFreshData && data.player?.nickname) {
+        profileStorage.saveProfile(uid, mergedData, gameCode);
+    }
+    
+    return mergedData;
+}
+
+/**
  * 获取最新的配置 (支持游戏分库)
  * @param {string} [gameCode='HSR'] - 游戏代码
  * @returns {Object} 包含统计信息、国际化、UI 配置和角色规则的配置对象
@@ -120,20 +193,24 @@ function getDmgBonusData(char, gameCode = 'HSR') {
  */
 function getDisplayCharName(char, gameCode = 'HSR') {
     if (!char || !char.id) return "???";
-    const { CHAR_RULES } = getCfg(gameCode);
+    const { CHAR_RULES, I18N } = getCfg(gameCode);
     const id = String(char.id);
     
+    let name = char.name;
     if (CHAR_RULES.trailblazer_prefix && id.startsWith(CHAR_RULES.trailblazer_prefix)) {
         const isFemale = parseInt(id, 10) % 2 === 0;
         const baseName = isFemale ? CHAR_RULES.trailblazer_ui.female : CHAR_RULES.trailblazer_ui.male;
-        return `${baseName} • ${char.path?.name || ''}`;
+        name = `${baseName} • ${char.path?.name || ''}`;
+    } else if (CHAR_RULES.multi_path_names?.includes(char.name)) {
+        name = `${char.name} • ${char.path?.name || ''}`;
     }
 
-    if (CHAR_RULES.multi_path_names?.includes(char.name)) {
-        return `${char.name} • ${char.path?.name || ''}`;
+    // 如果是在线的最新角色，增加云图标标识
+    if (char._isFresh === true) {
+        name = (I18N.CHAR_PANEL.ONLINE_ICON || '') + name;
     }
 
-    return char.name;
+    return name;
 }
 
 /**
@@ -167,16 +244,19 @@ function getLogicCharName(char, gameCode = 'HSR') {
 const getMainMenuKeyboard = (uid, characters = [], gameCode = 'HSR') => {
     const { I18N } = getCfg(gameCode);
     const keyboard = [];
-    const quickChars = characters.slice(0, 3);
-    for (let i = 0; i < quickChars.length; i += 3) {
-        const row = quickChars.slice(i, i + 3).map(c => Markup.button.callback(getDisplayCharName(c, gameCode), `profile:${uid}:${c.id}`));
+    
+    // 主页快捷按钮仅显示“在线”的角色
+    const freshChars = characters.filter(c => c._isFresh !== false).slice(0, 3);
+    if (freshChars.length > 0) {
+        const row = freshChars.map(c => Markup.button.callback(getDisplayCharName(c, gameCode), `profile:${uid}:${c.id}`));
         keyboard.push(row);
     }
 
     keyboard.push([
         Markup.button.callback(I18N.PROFILE.KEYBOARD.SHOWCASE, `me_showcase:${uid}`),
-        Markup.button.callback(I18N.PROFILE.KEYBOARD.GACHA_STATS, `gacha_pool:HSR:${uid}:11`)
+        Markup.button.callback(I18N.PROFILE.KEYBOARD.GACHA_STATS, `gacha_pool:HSR:${uid}:11`),
     ]);
+    
     keyboard.push([
         Markup.button.callback(I18N.PROFILE.KEYBOARD.SYNC, `sync_data:${uid}`)
     ]);
@@ -185,7 +265,7 @@ const getMainMenuKeyboard = (uid, characters = [], gameCode = 'HSR') => {
 };
 
 /**
- * 生成角色展柜键盘
+ * 生成角色展柜键盘 (整合所有角色)
  * @param {string|number} uid - 用户UID
  * @param {Array} characters - 角色列表
  * @param {string} [gameCode='HSR'] - 游戏代码
@@ -193,9 +273,13 @@ const getMainMenuKeyboard = (uid, characters = [], gameCode = 'HSR') => {
  */
 const getShowcaseKeyboard = (uid, characters, gameCode = 'HSR') => {
     const { I18N } = getCfg(gameCode);
-    const buttons = characters.map(c => Markup.button.callback(getDisplayCharName(c, gameCode), `profile:${uid}:${c.id}`));
+    // 按在线状态排序，在线角色在前
+    const sortedChars = [...characters].sort((a, b) => (b._isFresh === true ? 1 : 0) - (a._isFresh === true ? 1 : 0));
+    
+    const buttons = sortedChars.map(c => Markup.button.callback(getDisplayCharName(c, gameCode), `profile:${uid}:${c.id}`));
     const keyboard = [];
     for (let i = 0; i < buttons.length; i += 2) keyboard.push(buttons.slice(i, i + 2));
+    
     keyboard.push([
         Markup.button.callback(I18N.COMMON.KEYBOARD.BACK_TO_HOME, `back_to_me:${uid}`)
     ]);
@@ -367,6 +451,33 @@ const isUidBound = async (tgId, uid, gameCode = 'HSR') => {
 };
 
 /**
+ * 核心渲染函数：显示角色详情 (支持从缓存或强制刷新后调用)
+ */
+async function showCharacterDetail(ctx, uid, charId, gameCode = 'HSR') {
+    const { I18N } = getCfg(gameCode);
+    let data = await getMergedData(uid, { gameCode });
+    if (!data || data._isPlaceholder) {
+        const shouldSave = await isUidBound(ctx.from.id, uid, gameCode);
+        data = await getMergedData(uid, { force: true, gameCode, shouldSave });
+    }
+    
+    const char = data?.characters?.find(c => String(c.id) === String(charId));
+    if (!char) return;
+
+    const msg = renderCharacterDetail(char, gameCode);
+    try {
+        await ctx.editMessageText(msg, { 
+            parse_mode: 'HTML',
+            ...getShowcaseKeyboard(uid, data.characters, gameCode)
+        });
+    } catch (e) { 
+        if (!e.message.includes('not modified')) {
+            logger.error(I18N.CHAR_PANEL.EDIT_FAIL, e.message);
+        }
+    }
+}
+
+/**
  * 初始化角色面板处理流程
  * @param {Object} bot - Telegraf 实例
  */
@@ -384,24 +495,33 @@ const setupProfileHandlers = (bot) => {
         }
         await cache.bindUid(ctx.from.id, uid, gameCode);
         logger.done(`用户 ${ctx.from.id} 成功绑定 UID ${uid} [${gameCode}]`);
+        
+        // 【优化】先在 Valkey 中创建占位缓存，提升首次同步成功率
         const placeholder = api.getPlaceholderData(uid);
-        await ctx.reply(`正在绑定 UID ${uid}...`, { parse_mode: 'HTML' });
+        await cache.setCache(uid, placeholder, 300, gameCode);
+
+        await ctx.reply(I18N.AUTH.BINDING.replace('{uid}', uid), { parse_mode: 'HTML' });
         const dashboardMsg = await ctx.reply(renderPlayerInfo(placeholder, gameCode), {
             parse_mode: 'HTML',
             ...getMainMenuKeyboard(uid, [], gameCode)
         });
+
         (async () => {
             try {
-                const data = await api.getPlayerDetail(uid, true, gameCode);
-        if (data && !data._isPlaceholder && data.player?.nickname) {
-                    profileStorage.saveProfile(uid, data, gameCode);
+                const data = await getMergedData(uid, { force: true, gameCode, shouldSave: true });
+                if (data && !data._isPlaceholder && data.player?.nickname) {
                     logger.done(`UID ${uid} 数据后台同步成功`);
                     await ctx.telegram.editMessageText(ctx.chat.id, dashboardMsg.message_id, null, renderPlayerInfo(data, gameCode) + I18N.PLAYER_CENTER.DASHBOARD.SYNC_SUCCESS, {
                         parse_mode: 'HTML',
                         ...getMainMenuKeyboard(uid, data.characters, gameCode)
                     }).catch(() => {});
                 } else {
-                    logger.warn(`UID ${uid} 数据同步返回了无效或占位数据，拒绝写入本地，防止缓存污染`);
+                    logger.warn(`UID ${uid} 数据同步返回了无效或占位数据`);
+                    const errorMsg = renderPlayerInfo(data, gameCode) + `\n\n❌ ${I18N.CHAR_PANEL.SYNC_FAIL}`;
+                    await ctx.telegram.editMessageText(ctx.chat.id, dashboardMsg.message_id, null, errorMsg, {
+                        parse_mode: 'HTML',
+                        ...getMainMenuKeyboard(uid, [], gameCode)
+                    }).catch(() => {});
                 }
             } catch (e) {
                 logger.error(I18N.CHAR_PANEL.SYNC_FAIL, e);
@@ -419,13 +539,12 @@ const setupProfileHandlers = (bot) => {
         const uid = await cache.getBindUid(ctx.from.id, gameCode);
         if (!uid) return ctx.reply(I18N.AUTH.UPDATE_NEED_BIND);
         await ctx.reply(I18N.AUTH.UPDATE_SYNCING);
-        const data = await api.getPlayerDetail(uid, true, gameCode);
+        const data = await getMergedData(uid, { force: true, gameCode, shouldSave: true });
         if (data && !data._isPlaceholder && data.player?.nickname) {
-            profileStorage.saveProfile(uid, data, gameCode);
             logger.done(`用户 ${ctx.from.id} 强制刷新 UID ${uid} 成功`);
             ctx.reply(I18N.AUTH.UPDATE_DONE);
         } else {
-            logger.warn(`UID ${uid} 刷新返回了无效或占位数据，拒绝写入本地，防止缓存污染`);
+            logger.warn(`UID ${uid} 刷新返回了无效或占位数据，拒绝写入本地`);
             ctx.reply(I18N.AUTH.UPDATE_FAILED);
         }
     });
@@ -440,11 +559,9 @@ const setupProfileHandlers = (bot) => {
                 reply_markup: Markup.forceReply().reply_markup
             });
         }
-        const data = await api.getPlayerDetail(uid, false, gameCode);
+        const data = await getMergedData(uid, { gameCode, shouldSave: true });
         if (!data) return ctx.reply(I18N.COMMON.ERROR_API);
-        if (!data._isPlaceholder && data.player?.nickname) {
-            profileStorage.saveProfile(uid, data, gameCode);
-        }
+        
         await ctx.reply(renderPlayerInfo(data, gameCode), {
             parse_mode: 'HTML',
             ...getMainMenuKeyboard(uid, data.characters, gameCode)
@@ -455,7 +572,7 @@ const setupProfileHandlers = (bot) => {
         await ctx.answerCbQuery().catch(() => {});
         const uid = ctx.match[1];
         const gameCode = 'HSR';
-        const data = await api.getPlayerDetail(uid, false, gameCode);
+        const data = await getMergedData(uid, { gameCode });
         await ctx.editMessageText(renderPlayerInfo(data, gameCode), {
             parse_mode: 'HTML',
             ...getMainMenuKeyboard(uid, data.characters, gameCode)
@@ -467,7 +584,7 @@ const setupProfileHandlers = (bot) => {
         const { I18N } = getCfg(gameCode);
         await ctx.answerCbQuery().catch(() => {});
         const uid = ctx.match[1];
-        const data = await api.getPlayerDetail(uid, false, gameCode);
+        const data = await getMergedData(uid, { gameCode });
         let msg = I18N.CHAR_PANEL.SHOWCASE_TITLE.replace('{uid}', uid);
         await ctx.editMessageText(msg, {
             parse_mode: 'HTML',
@@ -487,61 +604,51 @@ const setupProfileHandlers = (bot) => {
         }
         const uid = uidResult;
 
-        // 立即返回一个同步中的面板
-        const placeholder = api.getPlaceholderData(uid);
-        const dashboardMsg = await ctx.reply(renderPlayerInfo(placeholder, gameCode), {
+        // 【优化】先检查是否有缓存，若无则在 Valkey 中创建占位缓存，提升首次响应速度
+        let data = await getMergedData(uid, { gameCode });
+        if (!data) {
+            data = api.getPlaceholderData(uid);
+            await cache.setCache(uid, data, 300, gameCode);
+        }
+
+        const dashboardMsg = await ctx.reply(renderPlayerInfo(data, gameCode), {
             parse_mode: 'HTML',
-            ...getMainMenuKeyboard(uid, [], gameCode)
+            ...getMainMenuKeyboard(uid, data.characters, gameCode)
         });
 
-        // 异步获取数据并刷新
-        (async () => {
-            try {
-                const data = await api.getPlayerDetail(uid, true, gameCode);
-                if (data && !data._isPlaceholder && data.player?.nickname) {
-                    if (await isUidBound(ctx.from.id, uid, gameCode)) {
-                        profileStorage.saveProfile(uid, data, gameCode);
+        // 如果是占位数据或回退数据，发起异步静默更新
+        if (data._isPlaceholder || data._isFallback) {
+            (async () => {
+                try {
+                    const shouldSave = await isUidBound(ctx.from.id, uid, gameCode);
+                    const freshData = await getMergedData(uid, { force: true, gameCode, shouldSave });
+                    
+                    if (freshData && !freshData._isPlaceholder && freshData.player?.nickname) {
+                        await ctx.telegram.editMessageText(ctx.chat.id, dashboardMsg.message_id, null, renderPlayerInfo(freshData, gameCode), {
+                            parse_mode: 'HTML',
+                            ...getMainMenuKeyboard(uid, freshData.characters, gameCode)
+                        }).catch(() => {});
+                    } else if (!data._isFallback) {
+                        logger.warn(`UID ${uid} 同步返回了无效数据`);
+                        const errorMsg = renderPlayerInfo(freshData, gameCode) + `\n\n❌ ${I18N.CHAR_PANEL.SYNC_FAIL}`;
+                        await ctx.telegram.editMessageText(ctx.chat.id, dashboardMsg.message_id, null, errorMsg, {
+                            parse_mode: 'HTML',
+                            ...getMainMenuKeyboard(uid, freshData.characters, gameCode)
+                        }).catch(() => {});
                     }
-                    await ctx.telegram.editMessageText(ctx.chat.id, dashboardMsg.message_id, null, renderPlayerInfo(data, gameCode), {
-                        parse_mode: 'HTML',
-                        ...getMainMenuKeyboard(uid, data.characters, gameCode)
-                    }).catch(() => {});
-                } else {
-                    logger.warn(`UID ${uid} 同步返回了无效或占位数据，拒绝写入本地`);
+                } catch (e) {
+                    logger.error(I18N.CHAR_PANEL.SYNC_FAIL, e);
                 }
-            } catch (e) {
-                logger.error(I18N.CHAR_PANEL.SYNC_FAIL, e);
-                // 同步失败时保留原面板，或给出提示
-            }
-        })();
+            })();
+        }
     });
 
     bot.action(/^profile:([1-9]\d{8}):(\d+)$/, async (ctx) => {
         await ctx.answerCbQuery().catch(() => {});
-        const [_, uid, charId] = ctx.match;
+        const uid = ctx.match[1];
+        const charId = ctx.match[2];
         const gameCode = 'HSR';
-
-        // 【修复】稳健获取数据：先尝试缓存，若缺失或为占位符则强制调用 API 刷新并缓存
-        let data = await api.getPlayerDetail(uid, false, gameCode);
-        if (!data || data._isPlaceholder) {
-            data = await api.getPlayerDetail(uid, true, gameCode);
-            if (data && !data._isPlaceholder) {
-                if (await isUidBound(ctx.from.id, uid, gameCode)) {
-                    profileStorage.saveProfile(uid, data, gameCode);
-                }
-            }
-        }
-        
-        const char = data?.characters?.find(c => c.id == charId);
-        if (!char) return;
-
-        const msg = renderCharacterDetail(char, gameCode);
-        try {
-            await ctx.editMessageText(msg, { 
-                parse_mode: 'HTML',
-                ...getShowcaseKeyboard(uid, data.characters, gameCode)
-            });
-        } catch (e) { if (!e.message.includes('not modified')) logger.error(I18N.CHAR_PANEL.EDIT_FAIL, e.message); }
+        await showCharacterDetail(ctx, uid, charId, gameCode);
     });
 
     bot.action(/^sync_data:([1-9]\d{8})(?::(\d+))?$/, async (ctx) => {
@@ -551,20 +658,20 @@ const setupProfileHandlers = (bot) => {
         const uid = ctx.match[1];
         const charId = ctx.match[2];
         await ctx.editMessageText(T.TITLE + T.QUEUING + T.SYNC_IN_PROGRESS, { parse_mode: 'HTML' }).catch(() => {});
-        const data = await api.getPlayerDetail(uid, true, gameCode);
+        
+        const shouldSave = await isUidBound(ctx.from.id, uid, gameCode);
+        const data = await getMergedData(uid, { force: true, gameCode, shouldSave });
         if (!data) return ctx.reply(I18N.COMMON.ERROR_API, { parse_mode: 'HTML' });
-        const boundUid = await cache.getBindUid(ctx.from.id, gameCode);
-        if (boundUid === uid && !data._isPlaceholder && data.player?.nickname) {
-            profileStorage.saveProfile(uid, data, gameCode);
-        } else if (boundUid === uid) {
-            logger.warn(`UID ${uid} 同步返回了无效或占位数据，拒绝写入本地，防止缓存污染`);
-        }
-        if (charId) {
-            ctx.match = [null, uid, charId];
-            return bot.handleUpdate(ctx.update); 
+        
+        if (charId && !data._isPlaceholder) {
+            return showCharacterDetail(ctx, uid, charId, gameCode);
         } else {
             let msg = renderPlayerInfo(data, gameCode);
-            msg += data._isFallback ? I18N.PLAYER_CENTER.DASHBOARD.SYNC_BACK_FALLBACK : I18N.PLAYER_CENTER.DASHBOARD.SYNC_SUCCESS;
+            if (data._isPlaceholder) {
+                msg += `\n\n❌ ${I18N.CHAR_PANEL.SYNC_FAIL}\nAPI 暂未响应，请稍后再试。`;
+            } else {
+                msg += data._isFallback ? I18N.PLAYER_CENTER.DASHBOARD.SYNC_BACK_FALLBACK : I18N.PLAYER_CENTER.DASHBOARD.SYNC_SUCCESS;
+            }
             await ctx.editMessageText(msg, {
                 parse_mode: 'HTML',
                 ...getMainMenuKeyboard(uid, data.characters, gameCode)

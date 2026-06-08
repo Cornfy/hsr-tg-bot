@@ -35,6 +35,7 @@ module.exports = {
         // 2. 鉴权与用户绑定
         AUTH: {
             BIND_PROMPT: "❓ 请输入 9 位 UID 进行绑定，或直接回复本条消息。\n例如：<code>/bind 100000001</code>",
+            BINDING: "⏳ 正在绑定 UID {uid}...",
             BIND_SUCCESS: "✅ <b>UID {uid} 绑定成功！</b>\n正在尝试从远程同步数据，请稍候...",
             UPDATE_NEED_BIND: "⚠️ 请先绑定 UID 后再使用更新功能。",
             UPDATE_SYNCING: "🔄 正在同步最新数据...",
@@ -67,6 +68,7 @@ module.exports = {
             PROMPT: "❓ 请输入 9 位 UID 或回复包含 UID 的消息。\n用法: <code>/profile 100000001</code>",
             INVALID_UID: "❌ <b>输入格式错误</b>\n你输入的 <code>{input}</code> 不是合法的 9 位 UID，请重新输入。",
             SHOWCASE_TITLE: "🎭 <b>角色展柜</b> (UID: {uid})\n请选择角色查看详情：",
+            ONLINE_ICON: "☁️ ",
             SEARCH_RES: "👤 <b>{nickname}</b> (UID: {uid})\n",
             NO_CHARACTERS: "⚠️ 暂无角色数据，请检查展柜是否公开。",
             DATA_EXCEPTION: "⚠️ 数据结构异常，无法显示玩家信息。",
