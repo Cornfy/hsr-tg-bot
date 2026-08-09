@@ -174,7 +174,7 @@ function renderGachaText(uid, poolId, rawLogs, gameCode = 'HSR') {
         .replace('{bar}', renderColorfulBar(result.currentPity, poolId, gachaSettings));
 
     // 历史记录表格渲染
-    const maxListSize = 15;
+    const maxListSize = 50;
     const recentRecords = [...result.fiveStarRecords].reverse().slice(0, maxListSize);
     
     // 动态对齐物品名列宽

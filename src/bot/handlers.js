@@ -101,7 +101,21 @@ function reloadAllModules() {
 
     // c. 基础路由 (启动/帮助)
     const welcomeHandler = (ctx) => {
-        ctx.reply(WELCOME_MSG, { parse_mode: 'HTML' });
+        let replyMessage = WELCOME_MSG;
+
+        // 检查是否未配置 ADMIN_TG_ID，或者仍为默认占位符
+        const currentAdminId = process.env.ADMIN_TG_ID;
+        const isNotConfigured = !currentAdminId || currentAdminId.includes('填写管理员');
+
+        if (isNotConfigured && ctx.from?.id) {
+            const userId = ctx.from.id;
+            replyMessage += `\n\n----------------------------\n` +
+                            `⚠️ **安全提示：检测到尚未绑定管理员**\n` +
+                            `您的当前 Telegram ID 是：<code>${userId}</code>\n` +
+                            `请将此 ID 填入 <code>.env</code> 文件的 <code>ADMIN_TG_ID</code> 中并重启机器人以获取管理权限。`;
+        }
+
+        ctx.reply(replyMessage, { parse_mode: 'HTML' });
     };
 
     stage.start(welcomeHandler);

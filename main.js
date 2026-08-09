@@ -28,12 +28,17 @@ async function bootstrap() {
 
         // 刷新管理员菜单 (公共菜单 + 管理员特权指令合并展示)
         if (process.env.ADMIN_TG_ID) {
-            await bot.telegram.setMyCommands([
-                ...publicCommands,
-                { command: 'reload', description: '【管理员】重载全量业务与配置文件' }
-            ], {
-                scope: { type: 'chat', chat_id: Number(process.env.ADMIN_TG_ID) }
-            });
+            try {
+                await bot.telegram.setMyCommands([
+                    ...publicCommands,
+                    { command: 'reload', description: '【管理员】重载全量业务与配置文件' }
+                ], {
+                    scope: { type: 'chat', chat_id: process.env.ADMIN_TG_ID }
+                });
+                logger.done('管理员专属菜单已成功同步');
+            } catch (err) {
+                logger.error('设置管理员菜单失败', err);
+            }
         }
         logger.done('菜单指令已成功同步至 Telegram 服务器 (已隔离用户权限)');
 
