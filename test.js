@@ -122,7 +122,8 @@ async function handleCommand(line) {
 
 function runTestAsync(cmd, ...args) {
     return new Promise((resolve) => {
-        const child = spawn('node', ['test-runner.js', cmd, ...args]);
+        // 动态获取当前正在执行这个脚本的解释器路径（无论是 node 还是 bun）
+        const child = spawn(process.execPath, ['test-runner.js', cmd, ...args]);
         let output = '';
 
         child.stdout.on('data', (data) => {
