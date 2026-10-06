@@ -54,5 +54,7 @@ module.exports = {
   "银狼LV.999": { "spd": 1.2, "crit_rate": 1.0, "crit_dmg": 1.0 },
   "绯英": { "spd": 1.0, "crit_rate": 1.0, "crit_dmg": 1.0, "atk_pc": 0.8 },
   "千冶•刃": { "spd": 1.0, "crit_rate": 1.0, "crit_dmg": 1.0, "hp_pc": 1.0 },
-  "default": { "spd": 1.0, "crit_rate": 1.0, "crit_dmg": 1.0, "atk_pc": 1.0, }
+  "知更鸟•晴歌": { "spd": 1.0, "crit_rate": 1.0, "crit_dmg": 1.0, "hp_pc": 1.0, "atk_pc": 1.0 },
+  "珍珠": { "spd": 1.0, "def_pc": 1.0, "effect_res": 1.0 },
+  "default": { "spd": 1.0, "crit_rate": 1.0, "crit_dmg": 1.0, "atk_pc": 1.0 }
 };
